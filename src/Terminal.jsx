@@ -74,7 +74,7 @@ export default function Terminal({ triggerGlitch, onAccessGranted, stage, setSta
     const tracingLines = [...baseLines, '', 'ACCESS GRANTED. TRACING_IP...'];
     setLines(tracingLines);
     try {
-      const { data } = await axios.post('http://localhost:5000/api/breach');
+      const { data } = await axios.post('/api/breach');
       setTimeout(() => {
         const extra = data?.success
           ? [

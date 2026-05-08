@@ -1,7 +1,15 @@
 import React, { useEffect, useRef } from 'react';
 import gsap from 'gsap';
 
+// Deteksi apakah device touch (mobile/tablet)
+const isTouchDevice = () =>
+  ('ontouchstart' in window) ||
+  (navigator.maxTouchPoints > 0) ||
+  window.matchMedia('(pointer: coarse)').matches;
+
 export default function CyberCursor() {
+  // Jangan render cursor custom di touch devices (mobile/tablet)
+  if (isTouchDevice()) return null;
   const innerCursorRef = useRef(null);
   const outerCursorRef = useRef(null);
   const requestRef = useRef(null);
@@ -95,7 +103,9 @@ export default function CyberCursor() {
   return (
     <>
       <style>{`
-        body, html, * { cursor: none !important; }
+        @media (pointer: fine) {
+          body, html, * { cursor: none !important; }
+        }
         .no-border-cursor { border: none !important; outline: none !important; box-shadow: none !important; }
       `}</style>
 

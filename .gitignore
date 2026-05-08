@@ -4,10 +4,10 @@ dist/
 *.env
 public/uploads/
 
-# Large 3D model files (melebihi batas GitHub 50MB)
-public/models/*.glb
+# Large 3D model files - hanya exclude file >50MB spesifik
+public/models/kholis1.glb
+public/models/Untitled.blend1
 public/models/*.blend
-public/models/*.blend1
 
 # Railway (tidak dipakai lagi)
 nixpacks.toml
