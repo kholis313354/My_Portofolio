@@ -8,3 +8,6 @@ public/uploads/
 public/models/*.glb
 public/models/*.blend
 public/models/*.blend1
+
+# Railway (tidak dipakai lagi)
+nixpacks.toml
