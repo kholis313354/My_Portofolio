@@ -7,8 +7,50 @@ class Canvas3DErrorBoundary extends Component {
   componentDidCatch(err) { console.warn('[3D_ERROR]', err.message); }
   render() {
     if (this.state.hasError) return (
-      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)', color: 'rgba(0,243,255,0.4)', fontFamily: "'VT323',monospace", fontSize: '14px', letterSpacing: '0.1em' }}>
-        [ 3D_RENDER_UNAVAILABLE ]
+      <div style={{
+        width: '100%', height: '100%',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'linear-gradient(135deg, #020c14 0%, #050f1a 50%, #020a12 100%)',
+        position: 'relative', overflow: 'hidden'
+      }}>
+        {/* Cyber grid background */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          backgroundImage: 'linear-gradient(rgba(0,243,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,243,255,0.04) 1px, transparent 1px)',
+          backgroundSize: '40px 40px'
+        }} />
+        {/* Scanline effect */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          backgroundImage: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 1px, transparent 1px, transparent 3px)',
+          pointerEvents: 'none'
+        }} />
+        {/* Corner brackets */}
+        <div style={{ position: 'absolute', top: '20px', left: '20px', width: '30px', height: '30px', borderTop: '2px solid rgba(0,243,255,0.5)', borderLeft: '2px solid rgba(0,243,255,0.5)' }} />
+        <div style={{ position: 'absolute', top: '20px', right: '20px', width: '30px', height: '30px', borderTop: '2px solid rgba(0,243,255,0.5)', borderRight: '2px solid rgba(0,243,255,0.5)' }} />
+        <div style={{ position: 'absolute', bottom: '20px', left: '20px', width: '30px', height: '30px', borderBottom: '2px solid rgba(0,243,255,0.5)', borderLeft: '2px solid rgba(0,243,255,0.5)' }} />
+        <div style={{ position: 'absolute', bottom: '20px', right: '20px', width: '30px', height: '30px', borderBottom: '2px solid rgba(0,243,255,0.5)', borderRight: '2px solid rgba(0,243,255,0.5)' }} />
+        {/* Profile image */}
+        <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+          <div style={{
+            width: '200px', height: '240px', position: 'relative',
+            borderRadius: '8px', overflow: 'hidden',
+            border: '1px solid rgba(0,243,255,0.4)',
+            boxShadow: '0 0 40px rgba(0,243,255,0.2), 0 0 80px rgba(112,0,255,0.1)',
+          }}>
+            <img
+              src="/images/profile2.png"
+              alt="Kholis"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'contrast(1.1) saturate(1.2)' }}
+              onError={(e) => { e.target.src = '/images/parrot-logo.jpg'; }}
+            />
+            {/* Cyan overlay scan */}
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 60%, rgba(0,243,255,0.15) 100%)' }} />
+          </div>
+          <div style={{ fontFamily: "'VT323', monospace", color: 'rgba(0,243,255,0.5)', fontSize: '11px', letterSpacing: '0.2em' }}>
+            [ AVATAR_3D_OFFLINE ]
+          </div>
+        </div>
       </div>
     );
     return this.props.children;

@@ -16,18 +16,41 @@ const __dirname = path.dirname(__filename);
 dotenv.config();
 
 // ── CLOUDINARY CONFIG ─────────────────────────────────────────
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key:    process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_API_KEY    = process.env.CLOUDINARY_API_KEY;
+const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET;
+
+// Cek apakah Cloudinary dikonfigurasi dengan benar (bukan placeholder)
+const isCloudinaryConfigured = (
+  CLOUDINARY_CLOUD_NAME &&
+  CLOUDINARY_API_KEY &&
+  CLOUDINARY_API_SECRET &&
+  !CLOUDINARY_CLOUD_NAME.includes('isi_') &&
+  !CLOUDINARY_API_KEY.includes('isi_') &&
+  !CLOUDINARY_API_SECRET.includes('isi_')
+);
+
+if (isCloudinaryConfigured) {
+  cloudinary.config({
+    cloud_name: CLOUDINARY_CLOUD_NAME,
+    api_key:    CLOUDINARY_API_KEY,
+    api_secret: CLOUDINARY_API_SECRET,
+  });
+  console.log('[Cloudinary] ✅ Configured —', CLOUDINARY_CLOUD_NAME);
+} else {
+  console.warn('[Cloudinary] ⚠️  NOT configured — file upload will be disabled. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET in Railway Variables.');
+}
 
 // Helper: Upload buffer ke Cloudinary
 function uploadToCloudinary(buffer, mimetype) {
+  if (!isCloudinaryConfigured) {
+    return Promise.reject(new Error('Cloudinary belum dikonfigurasi. Hubungi admin untuk mengaktifkan upload.'));
+  }
   return new Promise((resolve, reject) => {
     const resourceType = mimetype === 'application/pdf' ? 'raw' : 'image';
     const stream = cloudinary.uploader.upload_stream(
       { folder: 'portfolio', resource_type: resourceType },
+
       (error, result) => {
         if (error) reject(error);
         else resolve(result);
