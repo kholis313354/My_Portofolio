@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.env
+public/uploads/
+
+# Large 3D model files (melebihi batas GitHub 50MB)
+public/models/*.glb
+public/models/*.blend
+public/models/*.blend1
