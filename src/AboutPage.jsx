@@ -1,4 +1,20 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, Component } from 'react';
+
+// ErrorBoundary untuk isolasi komponen 3D agar halaman tidak crash total
+class Canvas3DErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { hasError: false }; }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(err) { console.warn('[3D_ERROR]', err.message); }
+  render() {
+    if (this.state.hasError) return (
+      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)', color: 'rgba(0,243,255,0.4)', fontFamily: "'VT323',monospace", fontSize: '14px', letterSpacing: '0.1em' }}>
+        [ 3D_RENDER_UNAVAILABLE ]
+      </div>
+    );
+    return this.props.children;
+  }
+}
+
 import { animate, createTimeline, stagger } from 'animejs';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { useGLTF, useAnimations, OrbitControls, Environment } from '@react-three/drei';
@@ -698,18 +714,24 @@ export default function AboutPage() {
 
             <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '30%', background: 'linear-gradient(to top, rgba(0,255,255,0.08), transparent)', pointerEvents: 'none', zIndex: 5 }} />
 
-            <Canvas gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.5 }} camera={{ position: [0, 1.5, 6], fov: 40 }} style={{ width: '100%', height: '100%' }}>
-              <ambientLight intensity={0.08} />
-              <React.Suspense fallback={null}>
-                <Environment files="/textures/blue_lagoon_night_1k.hdr" />
-                <ParallaxGroup>
-                  <MatrixBg />
-                  <Cybermask />
-                  <AvatarModel />
-                </ParallaxGroup>
-              </React.Suspense>
-              <OrbitControls enableZoom={false} enablePan={false} />
-            </Canvas>
+            <Canvas3DErrorBoundary>
+              <Canvas gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.5 }} camera={{ position: [0, 1.5, 6], fov: 40 }} style={{ width: '100%', height: '100%' }}>
+                <ambientLight intensity={0.08} />
+                <React.Suspense fallback={null}>
+                  <Environment files="/textures/blue_lagoon_night_1k.hdr" />
+                  <ParallaxGroup>
+                    <MatrixBg />
+                    <Canvas3DErrorBoundary>
+                      <Cybermask />
+                    </Canvas3DErrorBoundary>
+                    <Canvas3DErrorBoundary>
+                      <AvatarModel />
+                    </Canvas3DErrorBoundary>
+                  </ParallaxGroup>
+                </React.Suspense>
+                <OrbitControls enableZoom={false} enablePan={false} />
+              </Canvas>
+            </Canvas3DErrorBoundary>
 
             <AnimatePresence>
               {showCard && (

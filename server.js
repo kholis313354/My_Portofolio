@@ -66,19 +66,32 @@ const PORT = process.env.PORT || 5000;
 const KERNEL_PASSWORD = process.env.KERNEL_PASSWORD || 'cyber123';
 
 // ── DATABASE CONNECTION ──────────────────────────────────────
-// Mendukung Railway (DATABASE_URL + SSL) dan lokal (env terpisah)
+// Priority: 1) DATABASE_URL env var  2) Neon fallback (production)  3) Local PostgreSQL (dev)
+const NEON_FALLBACK = 'postgresql://neondb_owner:npg_MiQ1Xay0lDvV@ep-green-resonance-ao5mmlnc-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+
+const isProduction = process.env.NODE_ENV === 'production';
+const resolvedDbUrl = process.env.DATABASE_URL || (isProduction ? NEON_FALLBACK : null);
+
+console.log(`[DB] Mode: ${isProduction ? 'production' : 'development'} | Using: ${resolvedDbUrl ? 'connection string (cloud)' : 'local PostgreSQL'}`);
+
 const pool = new pg.Pool(
-  process.env.DATABASE_URL
+  resolvedDbUrl
     ? {
-        connectionString: process.env.DATABASE_URL,
-        ssl: { rejectUnauthorized: false } // wajib di Railway
+        connectionString: resolvedDbUrl,
+        ssl: { rejectUnauthorized: false }, // required for Neon & Railway SSL
+        max: 10,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000,
       }
     : {
         user:     process.env.DB_USER     || process.env.PGUSER     || 'postgres',
-        password: process.env.DB_PASSWORD || process.env.PGPASSWORD || '',
+        password: process.env.DB_PASSWORD || process.env.PGPASSWORD || 'Djokam354',
         host:     process.env.DB_HOST     || process.env.PGHOST     || 'localhost',
-        port:     process.env.DB_PORT     || process.env.PGPORT     || 5432,
-        database: process.env.DB_NAME     || process.env.PGDATABASE || 'postgres',
+        port:     parseInt(process.env.DB_PORT || process.env.PGPORT || '5432'),
+        database: process.env.DB_NAME     || process.env.PGDATABASE || 'portofolio_db',
+        max: 10,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000,
       }
 );
 
