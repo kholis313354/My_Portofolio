@@ -204,6 +204,27 @@ app.get('/', (req, res) => {
   res.json({ status: 'OK', message: 'Portofolio API Server is running', version: '1.0.0' });
 });
 
+// ── DEBUG: Check environment config (no secrets exposed) ──────
+app.get('/api/status', (req, res) => {
+  res.json({
+    server_version: '2.0',
+    node_env: process.env.NODE_ENV || 'not set',
+    cloudinary: {
+      configured: isCloudinaryConfigured,
+      cloud_name: CLOUDINARY_CLOUD_NAME || 'NOT_SET',
+      api_key_set: CLOUDINARY_API_KEY ? `SET (${CLOUDINARY_API_KEY.length} chars, starts: ${CLOUDINARY_API_KEY.substring(0,4)}...)` : 'NOT_SET',
+      api_secret_set: CLOUDINARY_API_SECRET ? `SET (${CLOUDINARY_API_SECRET.length} chars)` : 'NOT_SET',
+      cloudinary_url_env: process.env.CLOUDINARY_URL ? `SET (${process.env.CLOUDINARY_URL.length} chars)` : 'NOT_SET',
+      raw_cloud_name_env: process.env.CLOUDINARY_CLOUD_NAME || 'NOT_SET',
+      raw_api_key_env: process.env.CLOUDINARY_API_KEY ? 'SET' : 'NOT_SET',
+      raw_api_secret_env: process.env.CLOUDINARY_API_SECRET ? 'SET' : 'NOT_SET',
+    },
+    database: {
+      url_set: !!process.env.DATABASE_URL,
+    }
+  });
+});
+
 app.post('/api/breach', async (req, res) => {
   try {
     let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip;
