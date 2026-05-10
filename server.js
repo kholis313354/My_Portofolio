@@ -16,18 +16,45 @@ const __dirname = path.dirname(__filename);
 dotenv.config();
 
 // ── CLOUDINARY CONFIG ─────────────────────────────────────────
-const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
-const CLOUDINARY_API_KEY    = process.env.CLOUDINARY_API_KEY;
-const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET;
+// Support both formats:
+//   1. Separate vars: CLOUDINARY_CLOUD_NAME + CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET
+//   2. CLOUDINARY_URL: cloudinary://<api_key>:<api_secret>@<cloud_name>  (Railway default)
 
-// Cek apakah Cloudinary dikonfigurasi dengan benar (bukan placeholder)
-const isCloudinaryConfigured = (
-  CLOUDINARY_CLOUD_NAME &&
-  CLOUDINARY_API_KEY &&
-  CLOUDINARY_API_SECRET &&
-  !CLOUDINARY_CLOUD_NAME.includes('isi_') &&
-  !CLOUDINARY_API_KEY.includes('isi_') &&
-  !CLOUDINARY_API_SECRET.includes('isi_')
+let CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME || '';
+let CLOUDINARY_API_KEY    = process.env.CLOUDINARY_API_KEY    || '';
+let CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET || '';
+
+// Auto-parse CLOUDINARY_URL if individual vars are missing/placeholder
+const CLOUDINARY_URL_RAW = process.env.CLOUDINARY_URL || '';
+if (CLOUDINARY_URL_RAW && CLOUDINARY_URL_RAW.startsWith('cloudinary://')) {
+  try {
+    // Format: cloudinary://api_key:api_secret@cloud_name
+    const withoutScheme = CLOUDINARY_URL_RAW.replace('cloudinary://', '');
+    const atIdx = withoutScheme.lastIndexOf('@');
+    if (atIdx !== -1) {
+      const credentials = withoutScheme.substring(0, atIdx);       // api_key:api_secret
+      const cloudName   = withoutScheme.substring(atIdx + 1);      // cloud_name
+      const colonIdx    = credentials.indexOf(':');
+      if (colonIdx !== -1) {
+        const parsedKey    = credentials.substring(0, colonIdx);
+        const parsedSecret = credentials.substring(colonIdx + 1);
+        // Only override if individual vars are empty/placeholder
+        if (!CLOUDINARY_CLOUD_NAME || CLOUDINARY_CLOUD_NAME.includes('isi_')) CLOUDINARY_CLOUD_NAME = cloudName;
+        if (!CLOUDINARY_API_KEY    || CLOUDINARY_API_KEY.includes('isi_'))    CLOUDINARY_API_KEY    = parsedKey;
+        if (!CLOUDINARY_API_SECRET || CLOUDINARY_API_SECRET.includes('isi_')) CLOUDINARY_API_SECRET = parsedSecret;
+        console.log('[Cloudinary] 🔑 Parsed from CLOUDINARY_URL — cloud:', cloudName);
+      }
+    }
+  } catch (parseErr) {
+    console.error('[Cloudinary] ❌ Failed to parse CLOUDINARY_URL:', parseErr.message);
+  }
+}
+
+// Check if Cloudinary is properly configured
+const isCloudinaryConfigured = Boolean(
+  CLOUDINARY_CLOUD_NAME && !CLOUDINARY_CLOUD_NAME.includes('isi_') &&
+  CLOUDINARY_API_KEY    && !CLOUDINARY_API_KEY.includes('isi_')    &&
+  CLOUDINARY_API_SECRET && !CLOUDINARY_API_SECRET.includes('isi_')
 );
 
 if (isCloudinaryConfigured) {
@@ -36,9 +63,9 @@ if (isCloudinaryConfigured) {
     api_key:    CLOUDINARY_API_KEY,
     api_secret: CLOUDINARY_API_SECRET,
   });
-  console.log('[Cloudinary] ✅ Configured —', CLOUDINARY_CLOUD_NAME);
+  console.log('[Cloudinary] ✅ Configured — cloud_name:', CLOUDINARY_CLOUD_NAME);
 } else {
-  console.warn('[Cloudinary] ⚠️  NOT configured — file upload will be disabled. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET in Railway Variables.');
+  console.warn('[Cloudinary] ⚠️  NOT configured. Set CLOUDINARY_URL or (CLOUDINARY_CLOUD_NAME + CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET) in Railway Variables.');
 }
 
 // Helper: Upload buffer ke Cloudinary
