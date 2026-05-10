@@ -233,12 +233,22 @@ app.post('/api/breach', async (req, res) => {
 // ── FILE UPLOAD API (Cloudinary) ─────────────────────────────
 app.post('/api/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+  // Early check: Cloudinary not configured
+  if (!isCloudinaryConfigured) {
+    console.warn('[UPLOAD] Cloudinary not configured — rejecting upload request');
+    return res.status(500).json({
+      error: 'Cloudinary belum dikonfigurasi. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, dan CLOUDINARY_API_SECRET di Railway Environment Variables.',
+      code: 'CLOUDINARY_NOT_CONFIGURED'
+    });
+  }
+
   try {
     const result = await uploadToCloudinary(req.file.buffer, req.file.mimetype);
     res.json({ url: result.secure_url, filename: result.public_id });
   } catch (err) {
     console.error('[CLOUDINARY_UPLOAD_ERROR]', err.message);
-    res.status(500).json({ error: 'Upload to Cloudinary failed' });
+    res.status(500).json({ error: 'Upload ke Cloudinary gagal: ' + err.message, code: 'CLOUDINARY_UPLOAD_FAILED' });
   }
 });
 

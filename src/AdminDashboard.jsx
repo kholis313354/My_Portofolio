@@ -39,38 +39,104 @@ function Field({ label, name, value, onChange, type = 'text', placeholder = '' }
 
 function FileField({ label, onUpload, currentUrl }) {
   const [loading, setLoading] = useState(false);
+  const [showManualInput, setShowManualInput] = useState(false);
+  const [manualUrl, setManualUrl] = useState('');
+  const [uploadError, setUploadError] = useState('');
   const inputId = React.useRef(`file-upload-${Math.random().toString(36).slice(2)}`).current;
+
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     setLoading(true);
+    setUploadError('');
     const formData = new FormData();
     formData.append('file', file);
     try {
       const { data } = await axios.post(`${API}/api/upload`, formData);
       onUpload(data.url);
-    } catch (e) { alert('Upload gagal: ' + e.message); }
-    finally { setLoading(false); }
+      setShowManualInput(false);
+    } catch (err) {
+      const isCloudinaryErr = err?.response?.status === 500;
+      const msg = isCloudinaryErr
+        ? 'Cloudinary belum dikonfigurasi di server. Gunakan URL manual sebagai alternatif.'
+        : 'Upload gagal: ' + (err?.response?.data?.error || err.message);
+      setUploadError(msg);
+      if (isCloudinaryErr) setShowManualInput(true);
+    } finally { setLoading(false); }
   };
+
+  const handleManualSubmit = () => {
+    if (manualUrl.trim()) {
+      onUpload(manualUrl.trim());
+      setManualUrl('');
+      setShowManualInput(false);
+      setUploadError('');
+    }
+  };
+
   return (
     <div className="mb-5">
       {label ? <label className="block text-[10px] font-bold mb-2 uppercase tracking-[0.15em]" style={{ color: 'rgba(255,255,255,0.4)' }}>{label}</label> : null}
-      <div className="flex items-center gap-4 p-4 rounded-xl" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)' }}>
-        {currentUrl ? (
-          <div className="w-12 h-12 rounded-lg overflow-hidden border border-white/10 flex-shrink-0">
-            <img src={currentUrl} className="w-full h-full object-cover" alt="Preview" onError={(e) => e.target.src='/images/profile2.png'} />
+      <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(0,0,0,0.3)', border: `1px solid ${uploadError ? 'rgba(230,57,70,0.4)' : 'rgba(255,255,255,0.08)'}` }}>
+        <div className="flex items-center gap-4 p-4">
+          {currentUrl ? (
+            <div className="w-12 h-12 rounded-lg overflow-hidden border border-white/10 flex-shrink-0">
+              <img src={currentUrl} className="w-full h-full object-cover" alt="Preview" onError={(e) => e.target.src='/images/profile2.png'} />
+            </div>
+          ) : (
+            <div className="w-12 h-12 rounded-lg bg-white/5 border border-dashed border-white/20 flex items-center justify-center text-lg flex-shrink-0">🖼️</div>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <input type="file" onChange={handleFileChange} className="hidden" id={inputId} accept="image/*,.pdf" />
+              <label htmlFor={inputId} className="inline-block px-4 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all"
+                style={{ background: loading ? '#333' : 'rgba(0,180,216,0.1)', color: loading ? '#666' : '#00b4d8', border: '1px solid rgba(0,180,216,0.2)', pointerEvents: loading ? 'none' : 'auto' }}>
+                {loading ? '⟳ UPLOADING...' : '📁 PILIH FILE'}
+              </label>
+              <button type="button" onClick={() => { setShowManualInput(v => !v); setUploadError(''); }}
+                className="px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all"
+                style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                🔗 URL Manual
+              </button>
+            </div>
+            <p className="text-[10px] mt-1.5 truncate" style={{ color: currentUrl ? 'rgba(0,180,216,0.7)' : 'rgba(255,255,255,0.2)' }}>
+              {currentUrl ? currentUrl.split('/').pop() : 'Belum ada file dipilih'}
+            </p>
           </div>
-        ) : (
-          <div className="w-12 h-12 rounded-lg bg-white/5 border border-dashed border-white/20 flex items-center justify-center text-lg">🖼️</div>
-        )}
-        <div className="flex-1 min-w-0">
-           <input type="file" onChange={handleFileChange} className="hidden" id={inputId} />
-           <label htmlFor={inputId} className="inline-block px-4 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all" 
-             style={{ background: loading ? '#333' : 'rgba(0,180,216,0.1)', color: '#00b4d8', border: '1px solid rgba(0,180,216,0.2)' }}>
-             {loading ? 'MODULATING...' : 'PILIH FILE'}
-           </label>
-           <p className="text-[10px] text-gray-500 mt-1 truncate">{currentUrl ? currentUrl.split('/').pop() : 'Belum ada file dipilih'}</p>
         </div>
+
+        {/* Error message */}
+        {uploadError && (
+          <div className="px-4 pb-3 flex items-start gap-2">
+            <span className="text-[18px] flex-shrink-0">⚠️</span>
+            <p className="text-[11px] leading-relaxed" style={{ color: '#f4a261' }}>{uploadError}</p>
+          </div>
+        )}
+
+        {/* Manual URL input */}
+        {showManualInput && (
+          <div className="px-4 pb-4 pt-1 border-t border-white/5">
+            <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              Masukkan URL Gambar (Cloudinary / Imgur / Drive / dll)
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={manualUrl}
+                onChange={e => setManualUrl(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleManualSubmit()}
+                placeholder="https://res.cloudinary.com/... atau https://i.imgur.com/..."
+                className="flex-1 rounded-lg px-3 py-2 text-[12px] text-white outline-none"
+                style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,180,216,0.2)', color: '#fff' }}
+              />
+              <button type="button" onClick={handleManualSubmit}
+                className="px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all"
+                style={{ background: '#00b4d8', color: '#fff' }}>
+                SET
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
