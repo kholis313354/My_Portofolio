@@ -109,6 +109,43 @@ const buildResultsArray = (data) => {
     blank();
   });
 
+  // ── Google Web Recon Results ──
+  if (data.google_results && data.google_results.length > 0) {
+    push([
+      { text: `┌─ [🌐] `, color: cyan },
+      { text: 'GOOGLE WEB RECON', color: '#ff4444' },
+      { text: ` — ${data.google_results.length} hasil ditemukan`, color: dim },
+    ]);
+    data.google_results.slice(0, 5).forEach((g, idx) => {
+      const isLast = idx === Math.min(data.google_results.length, 5) - 1;
+      const pre = isLast ? '│  └── ' : '│  ├── ';
+      push([
+        { text: pre, color: purple },
+        { text: g.title.slice(0, 45).padEnd(47), color: yellow },
+      ]);
+      push([
+        { text: isLast ? '       ' : '│      ', color: purple },
+        { text: 'link: ', color: gray },
+        { text: g.link, color: green },
+      ]);
+      push([
+        { text: isLast ? '       ' : '│      ', color: purple },
+        { text: 'info: ', color: gray },
+        { text: g.snippet.replace(/\n/g, ' ').slice(0, 60) + '...', color: dim },
+      ]);
+    });
+    push([{ text: '└──────────────────────────────────────────────', color: dim }]);
+    blank();
+  } else if (!data.google_active) {
+    push([
+      { text: '┌─ [🌐] ', color: cyan },
+      { text: 'GOOGLE WEB RECON', color: dim },
+    ]);
+    push([{ text: '│  └── ', color: purple }, { text: '[!] Offline — set GOOGLE_SEARCH_API_KEY & GOOGLE_SEARCH_CX di .env', color: dim }]);
+    push([{ text: '└──────────────────────────────────────────────', color: dim }]);
+    blank();
+  }
+
   // ── Summary ──
   div();
   const totalVerified = platforms.filter(p => p.verified).length;
@@ -122,7 +159,13 @@ const buildResultsArray = (data) => {
       { text: `${totalVerified} akun ditemukan`, color: totalVerified > 0 ? yellow : gray },
     ]);
   } else {
-    push([{ text: '  [!] Apify offline — isi APIFY_TOKEN di .env untuk verifikasi real-time', color: dim }]);
+    push([{ text: '  [!] Apify offline — isi APIFY_TOKEN di .env', color: dim }]);
+  }
+  if (data.google_active) {
+    push([
+      { text: '  [◈] Google Recon: ', color: purple },
+      { text: `${data.google_results?.length || 0} hasil ditemukan`, color: (data.google_results?.length > 0) ? yellow : gray },
+    ]);
   }
   push([{ text: '  [DB] Tersimpan ke database — ID: ', color: purple }, { text: `#${data.id || 'ERROR'}`, color: yellow }]);
   div();

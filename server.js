@@ -547,6 +547,30 @@ app.post('/api/osint/scan', async (req, res) => {
     }
   }
 
+  // ── Call Google Custom Search (if keys available) ──
+  let googleResults = [];
+  let googleActive = false;
+  const GOOGLE_SEARCH_API_KEY = process.env.GOOGLE_SEARCH_API_KEY || '';
+  const GOOGLE_SEARCH_CX = process.env.GOOGLE_SEARCH_CX || '';
+  if (GOOGLE_SEARCH_API_KEY && GOOGLE_SEARCH_CX) {
+    try {
+      const gRes = await axios.get(
+        `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_SEARCH_API_KEY}&cx=${GOOGLE_SEARCH_CX}&q=${nameEncoded}`,
+        { timeout: 15000 }
+      );
+      if (gRes.data && gRes.data.items) {
+        googleResults = gRes.data.items.map(item => ({
+          title: item.title,
+          link: item.link,
+          snippet: item.snippet
+        }));
+        googleActive = true;
+      }
+    } catch (e) {
+      console.log('[GOOGLE_SEARCH] Not available or timed out:', e.message);
+    }
+  }
+
   // Merge Apify results into platforms (mark as 'verified' if found by Apify)
   const platformsData = PLATFORM_LINKS.map(p => {
     const apifyMatch = apifyResults.find(a =>
@@ -560,14 +584,15 @@ app.post('/api/osint/scan', async (req, res) => {
     };
   });
 
-  const foundCount = apifyActive ? apifyResults.length : 0;
+  const foundCount = (apifyActive ? apifyResults.length : 0) + googleResults.length;
 
   // ── Save to DB (only name + ip + metadata) ──
   let savedRow = null;
   try {
+    const dbPayload = { platforms: platformsData, google: googleResults };
     const { rows } = await pool.query(
       `INSERT INTO osint_scans (full_name, ip, found_count, platforms) VALUES ($1, $2, $3, $4) RETURNING *`,
-      [name, ip, foundCount, JSON.stringify(platformsData)]
+      [name, ip, foundCount, JSON.stringify(dbPayload)]
     );
     savedRow = rows[0];
   } catch (dbErr) {
@@ -590,9 +615,11 @@ app.post('/api/osint/scan', async (req, res) => {
     ip,
     found_count: foundCount,
     apify_active: apifyActive,
+    google_active: googleActive,
     remaining_today: remaining,
     limit: DAILY_LIMIT,
     platforms:  platformsData,
+    google_results: googleResults,
     username_variants: { slug: nameLower, hyphen: nameHyphen, underscore: nameUnderscore, dot: nameDot },
   });
 });
