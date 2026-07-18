@@ -9,6 +9,24 @@ import { Readable } from 'stream';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import {
+  resolveCloudinaryConfig,
+  cloudinaryResourceType,
+  isAllowedUpload,
+  normalizeIp,
+  resolveClientIp,
+  isLocalIp,
+  pickCoordinate,
+  safeNumber,
+  buildPlatformLinks,
+  generateUsernameVariants,
+  mergePlatformsWithApify,
+  computeFoundCount,
+  validateFullName,
+  parseDailyLimit,
+  computeRateLimit,
+  resolveDbConfig,
+} from './lib/utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,42 +38,12 @@ dotenv.config();
 //   1. Separate vars: CLOUDINARY_CLOUD_NAME + CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET
 //   2. CLOUDINARY_URL: cloudinary://<api_key>:<api_secret>@<cloud_name>  (Railway default)
 
-let CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME || '';
-let CLOUDINARY_API_KEY    = process.env.CLOUDINARY_API_KEY    || '';
-let CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET || '';
-
-// Auto-parse CLOUDINARY_URL if individual vars are missing/placeholder
-const CLOUDINARY_URL_RAW = process.env.CLOUDINARY_URL || '';
-if (CLOUDINARY_URL_RAW && CLOUDINARY_URL_RAW.startsWith('cloudinary://')) {
-  try {
-    // Format: cloudinary://api_key:api_secret@cloud_name
-    const withoutScheme = CLOUDINARY_URL_RAW.replace('cloudinary://', '');
-    const atIdx = withoutScheme.lastIndexOf('@');
-    if (atIdx !== -1) {
-      const credentials = withoutScheme.substring(0, atIdx);       // api_key:api_secret
-      const cloudName   = withoutScheme.substring(atIdx + 1);      // cloud_name
-      const colonIdx    = credentials.indexOf(':');
-      if (colonIdx !== -1) {
-        const parsedKey    = credentials.substring(0, colonIdx);
-        const parsedSecret = credentials.substring(colonIdx + 1);
-        // Only override if individual vars are empty/placeholder
-        if (!CLOUDINARY_CLOUD_NAME || CLOUDINARY_CLOUD_NAME.includes('isi_')) CLOUDINARY_CLOUD_NAME = cloudName;
-        if (!CLOUDINARY_API_KEY    || CLOUDINARY_API_KEY.includes('isi_'))    CLOUDINARY_API_KEY    = parsedKey;
-        if (!CLOUDINARY_API_SECRET || CLOUDINARY_API_SECRET.includes('isi_')) CLOUDINARY_API_SECRET = parsedSecret;
-        console.log('[Cloudinary] 🔑 Parsed from CLOUDINARY_URL — cloud:', cloudName);
-      }
-    }
-  } catch (parseErr) {
-    console.error('[Cloudinary] ❌ Failed to parse CLOUDINARY_URL:', parseErr.message);
-  }
-}
-
-// Check if Cloudinary is properly configured
-const isCloudinaryConfigured = Boolean(
-  CLOUDINARY_CLOUD_NAME && !CLOUDINARY_CLOUD_NAME.includes('isi_') &&
-  CLOUDINARY_API_KEY    && !CLOUDINARY_API_KEY.includes('isi_')    &&
-  CLOUDINARY_API_SECRET && !CLOUDINARY_API_SECRET.includes('isi_')
-);
+const {
+  cloudName: CLOUDINARY_CLOUD_NAME,
+  apiKey: CLOUDINARY_API_KEY,
+  apiSecret: CLOUDINARY_API_SECRET,
+  configured: isCloudinaryConfigured,
+} = resolveCloudinaryConfig(process.env);
 
 if (isCloudinaryConfigured) {
   cloudinary.config({
@@ -74,7 +62,7 @@ function uploadToCloudinary(buffer, mimetype) {
     return Promise.reject(new Error('Cloudinary belum dikonfigurasi. Hubungi admin untuk mengaktifkan upload.'));
   }
   return new Promise((resolve, reject) => {
-    const resourceType = mimetype === 'application/pdf' ? 'raw' : 'image';
+    const resourceType = cloudinaryResourceType(mimetype);
     const stream = cloudinary.uploader.upload_stream(
       { folder: 'portfolio', resource_type: resourceType },
 
@@ -92,10 +80,7 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter: (req, file, cb) => {
-    const allowed = /jpeg|jpg|png|gif|webp|pdf/;
-    const ext  = allowed.test(path.extname(file.originalname).toLowerCase());
-    const mime = allowed.test(file.mimetype);
-    if (ext && mime) cb(null, true);
+    if (isAllowedUpload(file.originalname, file.mimetype)) cb(null, true);
     else cb(new Error('Only images and PDFs allowed'));
   }
 });
@@ -117,33 +102,11 @@ const KERNEL_PASSWORD = process.env.KERNEL_PASSWORD || 'cyber123';
 
 // ── DATABASE CONNECTION ──────────────────────────────────────
 // Priority: 1) DATABASE_URL env var  2) Neon fallback (production)  3) Local PostgreSQL (dev)
-const NEON_FALLBACK = 'postgresql://neondb_owner:npg_MiQ1Xay0lDvV@ep-green-resonance-ao5mmlnc-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+const { usingConnectionString, config: dbConfig } = resolveDbConfig(process.env);
 
-const isProduction = process.env.NODE_ENV === 'production';
-const resolvedDbUrl = process.env.DATABASE_URL || (isProduction ? NEON_FALLBACK : null);
+console.log(`[DB] Mode: ${process.env.NODE_ENV === 'production' ? 'production' : 'development'} | Using: ${usingConnectionString ? 'connection string (cloud)' : 'local PostgreSQL'}`);
 
-console.log(`[DB] Mode: ${isProduction ? 'production' : 'development'} | Using: ${resolvedDbUrl ? 'connection string (cloud)' : 'local PostgreSQL'}`);
-
-const pool = new pg.Pool(
-  resolvedDbUrl
-    ? {
-        connectionString: resolvedDbUrl,
-        ssl: { rejectUnauthorized: false }, // required for Neon & Railway SSL
-        max: 10,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 10000,
-      }
-    : {
-        user:     process.env.DB_USER     || process.env.PGUSER     || 'postgres',
-        password: process.env.DB_PASSWORD || process.env.PGPASSWORD || 'Djokam354',
-        host:     process.env.DB_HOST     || process.env.PGHOST     || 'localhost',
-        port:     parseInt(process.env.DB_PORT || process.env.PGPORT || '5432'),
-        database: process.env.DB_NAME     || process.env.PGDATABASE || 'portofolio_db',
-        max: 10,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 10000,
-      }
-);
+const pool = new pg.Pool(dbConfig);
 
 async function initDB() {
   const queries = [
@@ -227,13 +190,10 @@ app.get('/api/status', (req, res) => {
 
 app.post('/api/breach', async (req, res) => {
   try {
-    let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip;
-    // Normalize IPv6 localhost
-    if (ip && ip.includes('::ffff:')) ip = ip.split('::ffff:')[1];
+    let ip = normalizeIp(req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip);
 
     // If local/private IP, resolve real public IP via ipify
-    const isLocal = !ip || ip === '::1' || ip.startsWith('127.') || ip.startsWith('192.168.') || ip.startsWith('10.');
-    if (isLocal) {
+    if (isLocalIp(ip)) {
       try {
         const ipRes = await axios.get('https://api.ipify.org?format=json', { timeout: 4000 });
         ip = ipRes.data.ip;
@@ -249,18 +209,15 @@ app.post('/api/breach', async (req, res) => {
     const country = data.country || 'Unknown';
 
     // Prioritaskan koordinat dari request body jika dikirimkan (dari Firefox Geolocation)
-    const bodyLat = Number(req.body.lat);
-    const bodyLon = Number(req.body.lon);
-
-    const lat = (!isNaN(bodyLat) && bodyLat !== 0) ? bodyLat : (data.lat || 0);
-    const lon = (!isNaN(bodyLon) && bodyLon !== 0) ? bodyLon : (data.lon || 0);
+    const lat = pickCoordinate(req.body.lat, data.lat);
+    const lon = pickCoordinate(req.body.lon, data.lon);
 
     let userAgent = req.headers['user-agent'] || 'Unknown Agent';
     if (req.body.source === 'firefox_esr') {
       userAgent = `[FIREFOX_OSINT] ${userAgent}`;
     }
-    const safeLat = isNaN(Number(lat)) ? 0 : Number(lat);
-    const safeLon = isNaN(Number(lon)) ? 0 : Number(lon);
+    const safeLat = safeNumber(lat);
+    const safeLon = safeNumber(lon);
 
     try {
       console.log(`[DB_INSERT] Attempting to log intruder: ${clientIp} (${city}, ${country})`);
@@ -443,9 +400,8 @@ app.delete('/api/messages/:id', async (req, res) => {
 
 // ── OSINT NAME SEARCH — RATE LIMIT CHECK ──────────────────────
 app.get('/api/osint/rate-check', async (req, res) => {
-  const DAILY_LIMIT = parseInt(process.env.OSINT_DAILY_LIMIT || '3');
-  let ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || '0.0.0.0';
-  if (ip.includes('::ffff:')) ip = ip.split('::ffff:')[1];
+  const DAILY_LIMIT = parseDailyLimit(process.env.OSINT_DAILY_LIMIT);
+  const ip = resolveClientIp(req.headers, req.socket);
 
   try {
     const { rows } = await pool.query(
@@ -453,8 +409,7 @@ app.get('/api/osint/rate-check', async (req, res) => {
        WHERE ip = $1 AND created_at >= CURRENT_DATE`,
       [ip]
     );
-    const used = parseInt(rows[0].cnt);
-    res.json({ ip, used, limit: DAILY_LIMIT, remaining: Math.max(0, DAILY_LIMIT - used), allowed: used < DAILY_LIMIT });
+    res.json({ ip, ...computeRateLimit(rows[0].cnt, DAILY_LIMIT) });
   } catch (err) {
     res.json({ ip, used: 0, limit: DAILY_LIMIT, remaining: DAILY_LIMIT, allowed: true });
   }
@@ -464,17 +419,17 @@ app.get('/api/osint/rate-check', async (req, res) => {
 // Uses Apify Social Media Finder actor + static platform link generation
 app.post('/api/osint/scan', async (req, res) => {
   const { full_name } = req.body;
-  if (!full_name || full_name.trim().length < 2) {
-    return res.status(400).json({ error: 'Nama lengkap minimal 2 karakter' });
+  const validation = validateFullName(full_name);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.error });
   }
 
-  const name = full_name.trim();
-  const DAILY_LIMIT = parseInt(process.env.OSINT_DAILY_LIMIT || '3');
+  const name = validation.name;
+  const DAILY_LIMIT = parseDailyLimit(process.env.OSINT_DAILY_LIMIT);
   const APIFY_TOKEN = process.env.APIFY_TOKEN || '';
 
   // ── Resolve client IP ──
-  let ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || '0.0.0.0';
-  if (ip.includes('::ffff:')) ip = ip.split('::ffff:')[1];
+  const ip = resolveClientIp(req.headers, req.socket);
 
   // ── Rate limit check (3 scans per IP per day) ──
   try {
@@ -493,40 +448,10 @@ app.post('/api/osint/scan', async (req, res) => {
   } catch (_) { /* allow if rate check fails */ }
 
   // ── Generate username variants from name ──
-  const nameLower   = name.toLowerCase().replace(/\s+/g, '');
-  const nameHyphen  = name.toLowerCase().replace(/\s+/g, '-');
-  const nameUnderscore = name.toLowerCase().replace(/\s+/g, '_');
-  const nameDot     = name.toLowerCase().replace(/\s+/g, '.');
-  const nameEncoded = encodeURIComponent(name);
+  const { slug: nameLower, hyphen: nameHyphen, underscore: nameUnderscore, dot: nameDot, encoded: nameEncoded } = generateUsernameVariants(name);
 
   // ── Static platform link generation (always available, no API key needed) ──
-  const PLATFORM_LINKS = [
-    // Social
-    { platform: 'Instagram',  category: 'Social',       url: `https://www.instagram.com/${nameLower}/`,                  icon: '📸' },
-    { platform: 'Facebook',   category: 'Social',       url: `https://www.facebook.com/search/people/?q=${nameEncoded}`, icon: '👤' },
-    { platform: 'Twitter/X',  category: 'Social',       url: `https://twitter.com/search?q=${nameEncoded}&f=user`,       icon: '🐦' },
-    { platform: 'TikTok',     category: 'Social',       url: `https://www.tiktok.com/@${nameLower}`,                    icon: '🎵' },
-    { platform: 'YouTube',    category: 'Social',       url: `https://www.youtube.com/@${nameLower}`,                   icon: '▶️'  },
-    { platform: 'Snapchat',   category: 'Social',       url: `https://www.snapchat.com/add/${nameLower}`,               icon: '👻' },
-    // Professional
-    { platform: 'LinkedIn',   category: 'Professional', url: `https://www.linkedin.com/search/results/people/?keywords=${nameEncoded}`, icon: '💼' },
-    { platform: 'GitHub',     category: 'Developer',    url: `https://github.com/${nameLower}`,                         icon: '🐙' },
-    { platform: 'GitLab',     category: 'Developer',    url: `https://gitlab.com/${nameLower}`,                         icon: '🦊' },
-    // Forums & Communities
-    { platform: 'Reddit',     category: 'Community',    url: `https://www.reddit.com/search/?q=${nameEncoded}&type=user`, icon: '🤖' },
-    { platform: 'Medium',     category: 'Blog',         url: `https://medium.com/@${nameLower}`,                        icon: '✍️'  },
-    { platform: 'Tumblr',     category: 'Blog',         url: `https://www.tumblr.com/${nameLower}`,                     icon: '📝' },
-    { platform: 'Pinterest',  category: 'Social',       url: `https://www.pinterest.com/${nameLower}/`,                 icon: '📌' },
-    // Asia-focused
-    { platform: 'Line',       category: 'Messaging',    url: `https://timeline.line.me/user/_${nameLower}`,             icon: '💬' },
-    { platform: 'Telegram',   category: 'Messaging',    url: `https://t.me/${nameLower}`,                               icon: '✈️'  },
-    // Cybersec / Tech
-    { platform: 'HackTheBox', category: 'CyberSec',     url: `https://app.hackthebox.com/users/search?term=${nameEncoded}`, icon: '🟩' },
-    { platform: 'TryHackMe',  category: 'CyberSec',     url: `https://tryhackme.com/p/${nameLower}`,                   icon: '🔐' },
-    { platform: 'LeetCode',   category: 'Developer',    url: `https://leetcode.com/${nameLower}/`,                      icon: '⚡' },
-    { platform: 'Steam',      category: 'Gaming',       url: `https://steamcommunity.com/search/users/#text=${nameEncoded}`, icon: '🎮' },
-    { platform: 'Keybase',    category: 'Privacy',      url: `https://keybase.io/${nameLower}`,                         icon: '🔑' },
-  ];
+  const PLATFORM_LINKS = buildPlatformLinks(name);
 
   // ── Call Apify Social Media Finder (if token available) ──
   let apifyResults = [];
@@ -572,19 +497,9 @@ app.post('/api/osint/scan', async (req, res) => {
   }
 
   // Merge Apify results into platforms (mark as 'verified' if found by Apify)
-  const platformsData = PLATFORM_LINKS.map(p => {
-    const apifyMatch = apifyResults.find(a =>
-      (a.platform || '').toLowerCase().includes(p.platform.toLowerCase().split('/')[0].toLowerCase()) ||
-      (a.url || '').toLowerCase().includes(p.platform.toLowerCase().split('/')[0].toLowerCase())
-    );
-    return {
-      ...p,
-      verified: !!apifyMatch,
-      apifyUrl: apifyMatch?.url || apifyMatch?.profileUrl || null,
-    };
-  });
+  const platformsData = mergePlatformsWithApify(PLATFORM_LINKS, apifyResults);
 
-  const foundCount = (apifyActive ? apifyResults.length : 0) + googleResults.length;
+  const foundCount = computeFoundCount(apifyActive, apifyResults, googleResults);
 
   // ── Save to DB (only name + ip + metadata) ──
   let savedRow = null;
