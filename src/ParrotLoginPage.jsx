@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import axios from 'axios';
 
+// Username shown at the email step (cosmetic gate only).
+// Password is verified server-side against KERNEL_PASSWORD — never in the client.
 const EMAIL = 'kholiskamal354@gmail.com';
-const PASSWORD = 'Djokam354';
 
 /* ──────────────────────────────────────────────
    Animated Network Canvas (Parrot OS login bg)
@@ -143,22 +145,28 @@ export default function ParrotLoginPage({ onSuccess }) {
     setStep('password');
   };
 
-  const handlePasswordSubmit = (e) => {
+  const handlePasswordSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    // Simulate auth delay
-    setTimeout(() => {
-      if (password === PASSWORD) {
-        setLoading(false);
-        onSuccess();
+    try {
+      const { data } = await axios.post('/v1/kernel-access/login', { password });
+      if (data?.success && data?.token) {
+        onSuccess(data.token);
       } else {
-        setLoading(false);
         setError('Password salah. Akses ditolak.');
         setPassword('');
       }
-    }, 900);
+    } catch (err) {
+      const msg = err?.response?.status === 401
+        ? 'Password salah. Akses ditolak.'
+        : 'Login gagal. Coba lagi.';
+      setError(msg);
+      setPassword('');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

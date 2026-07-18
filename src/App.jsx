@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import axios from 'axios';
 import SplashScreen from './SplashScreen';
 import TerminalPage from './TerminalPage';
 import AboutPage from './AboutPage';
@@ -7,6 +8,12 @@ import ParrotBoot from './ParrotBoot';
 import ParrotDesktop from './ParrotDesktop';
 import CyberCursor from './components/CyberCursor';
 import ParrotLoginPage from './ParrotLoginPage';
+
+// Restore admin auth token (set as default Authorization header for all API calls)
+const savedAdminToken = sessionStorage.getItem('adminToken');
+if (savedAdminToken) {
+  axios.defaults.headers.common['Authorization'] = `Bearer ${savedAdminToken}`;
+}
 
 // ── ErrorBoundary: mencegah blank screen ketika komponen 3D crash ──
 class ErrorBoundary extends React.Component {
@@ -57,17 +64,19 @@ class ErrorBoundary extends React.Component {
 export default function App() {
   const [page, setPage] = useState(0);
   const [adminAuthed, setAdminAuthed] = useState(
-    () => sessionStorage.getItem('adminAuthed') === 'true'
+    () => !!sessionStorage.getItem('adminToken')
   );
   const path = window.location.pathname;
 
-  const handleAdminSuccess = () => {
-    sessionStorage.setItem('adminAuthed', 'true');
+  const handleAdminSuccess = (token) => {
+    sessionStorage.setItem('adminToken', token);
+    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     setAdminAuthed(true);
   };
 
   const handleAdminLogout = () => {
-    sessionStorage.removeItem('adminAuthed');
+    sessionStorage.removeItem('adminToken');
+    delete axios.defaults.headers.common['Authorization'];
     setAdminAuthed(false);
   };
 

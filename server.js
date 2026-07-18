@@ -8,6 +8,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import { Readable } from 'stream';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -101,7 +102,26 @@ const upload = multer({
 });
 
 const app = express();
-app.use(cors());
+
+// ── CORS: restrict to an explicit allowlist ──────────────────
+// Set ALLOWED_ORIGINS as a comma-separated list, e.g.
+//   ALLOWED_ORIGINS=https://portofolio-kholis.onrender.com,http://localhost:5173
+// If unset, only same-origin requests (no Origin header) are allowed.
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin(origin, cb) {
+    // Allow same-origin / non-browser requests (no Origin header)
+    if (!origin) return cb(null, true);
+    if (ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin)) {
+      return cb(null, true);
+    }
+    return cb(new Error('Not allowed by CORS'));
+  },
+}));
 app.use(express.json());
 app.use((req, res, next) => {
   console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${req.path}`);
@@ -113,14 +133,44 @@ app.use('/images', express.static(path.join(__dirname, 'public', 'images')));
 app.use(express.static(path.join(__dirname, 'dist')));
 
 const PORT = process.env.PORT || 5000;
-const KERNEL_PASSWORD = process.env.KERNEL_PASSWORD || 'cyber123';
+const KERNEL_PASSWORD = process.env.KERNEL_PASSWORD || '';
+if (!KERNEL_PASSWORD) {
+  console.warn('[AUTH] ⚠️  KERNEL_PASSWORD is not set — admin login is disabled until it is configured.');
+}
+
+// ── SIMPLE TOKEN AUTH ─────────────────────────────────────────
+// Admin endpoints require a bearer token obtained from the login
+// endpoint. Tokens are random, held in memory and expire after 24h.
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+const sessions = new Map(); // token -> expiresAt (epoch ms)
+
+function issueToken() {
+  const token = crypto.randomBytes(32).toString('hex');
+  sessions.set(token, Date.now() + SESSION_TTL_MS);
+  return token;
+}
+
+function requireAuth(req, res, next) {
+  const header = req.headers['authorization'] || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  const expiresAt = token && sessions.get(token);
+  if (!expiresAt || expiresAt < Date.now()) {
+    if (token) sessions.delete(token);
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
 
 // ── DATABASE CONNECTION ──────────────────────────────────────
-// Priority: 1) DATABASE_URL env var  2) Neon fallback (production)  3) Local PostgreSQL (dev)
-const NEON_FALLBACK = 'postgresql://neondb_owner:npg_MiQ1Xay0lDvV@ep-green-resonance-ao5mmlnc-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
-
+// Priority: 1) DATABASE_URL env var  2) Local PostgreSQL (dev only)
+// No connection string is ever hardcoded — production MUST provide DATABASE_URL.
 const isProduction = process.env.NODE_ENV === 'production';
-const resolvedDbUrl = process.env.DATABASE_URL || (isProduction ? NEON_FALLBACK : null);
+const resolvedDbUrl = process.env.DATABASE_URL || null;
+
+if (isProduction && !resolvedDbUrl) {
+  console.error('[DB] FATAL: DATABASE_URL is not set in production. Refusing to start.');
+  process.exit(1);
+}
 
 console.log(`[DB] Mode: ${isProduction ? 'production' : 'development'} | Using: ${resolvedDbUrl ? 'connection string (cloud)' : 'local PostgreSQL'}`);
 
@@ -135,7 +185,7 @@ const pool = new pg.Pool(
       }
     : {
         user:     process.env.DB_USER     || process.env.PGUSER     || 'postgres',
-        password: process.env.DB_PASSWORD || process.env.PGPASSWORD || 'Djokam354',
+        password: process.env.DB_PASSWORD || process.env.PGPASSWORD || '',
         host:     process.env.DB_HOST     || process.env.PGHOST     || 'localhost',
         port:     parseInt(process.env.DB_PORT || process.env.PGPORT || '5432'),
         database: process.env.DB_NAME     || process.env.PGDATABASE || 'portofolio_db',
@@ -204,20 +254,13 @@ app.get('/', (req, res) => {
   res.json({ status: 'OK', message: 'Portofolio API Server is running', version: '1.0.0' });
 });
 
-// ── DEBUG: Check environment config (no secrets exposed) ──────
-app.get('/api/status', (req, res) => {
+// ── STATUS: config health (auth-gated, booleans only — no secret metadata) ──
+app.get('/api/status', requireAuth, (req, res) => {
   res.json({
     server_version: '2.0',
     node_env: process.env.NODE_ENV || 'not set',
     cloudinary: {
       configured: isCloudinaryConfigured,
-      cloud_name: CLOUDINARY_CLOUD_NAME || 'NOT_SET',
-      api_key_set: CLOUDINARY_API_KEY ? `SET (${CLOUDINARY_API_KEY.length} chars, starts: ${CLOUDINARY_API_KEY.substring(0,4)}...)` : 'NOT_SET',
-      api_secret_set: CLOUDINARY_API_SECRET ? `SET (${CLOUDINARY_API_SECRET.length} chars)` : 'NOT_SET',
-      cloudinary_url_env: process.env.CLOUDINARY_URL ? `SET (${process.env.CLOUDINARY_URL.length} chars)` : 'NOT_SET',
-      raw_cloud_name_env: process.env.CLOUDINARY_CLOUD_NAME || 'NOT_SET',
-      raw_api_key_env: process.env.CLOUDINARY_API_KEY ? 'SET' : 'NOT_SET',
-      raw_api_secret_env: process.env.CLOUDINARY_API_SECRET ? 'SET' : 'NOT_SET',
     },
     database: {
       url_set: !!process.env.DATABASE_URL,
@@ -279,7 +322,7 @@ app.post('/api/breach', async (req, res) => {
 });
 
 // ── FILE UPLOAD API (Cloudinary) ─────────────────────────────
-app.post('/api/upload', upload.single('file'), async (req, res) => {
+app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
   // Early check: Cloudinary not configured
@@ -301,15 +344,22 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 });
 
 app.post('/v1/kernel-access/login', (req, res) => {
+  if (!KERNEL_PASSWORD) {
+    return res.status(503).json({ success: false, message: 'Admin login not configured' });
+  }
   const { password } = req.body;
-  if (password === KERNEL_PASSWORD) {
-    res.json({ success: true });
+  const provided = typeof password === 'string' ? password : '';
+  const a = Buffer.from(provided);
+  const b = Buffer.from(KERNEL_PASSWORD);
+  const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
+  if (ok) {
+    res.json({ success: true, token: issueToken() });
   } else {
     res.status(401).json({ success: false, message: "ACCESS DENIED" });
   }
 });
 
-app.get('/v1/kernel-access/logs', async (req, res) => {
+app.get('/v1/kernel-access/logs', requireAuth, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM visitor_logs ORDER BY created_at DESC');
     res.json(result.rows);
@@ -323,7 +373,7 @@ app.get('/api/projects', async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM projects ORDER BY created_at DESC');
   res.json(rows);
 });
-app.post('/api/projects', async (req, res) => {
+app.post('/api/projects', requireAuth, async (req, res) => {
   const { title, description, tech_stack, image_url, image_url_2, image_url_3, github_url, live_url, label } = req.body;
   const { rows } = await pool.query(
     'INSERT INTO projects (title,description,tech_stack,image_url,image_url_2,image_url_3,github_url,live_url,label) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
@@ -331,7 +381,7 @@ app.post('/api/projects', async (req, res) => {
   );
   res.json(rows[0]);
 });
-app.put('/api/projects/:id', async (req, res) => {
+app.put('/api/projects/:id', requireAuth, async (req, res) => {
   const { title, description, tech_stack, image_url, image_url_2, image_url_3, github_url, live_url, label } = req.body;
   const { rows } = await pool.query(
     'UPDATE projects SET title=$1,description=$2,tech_stack=$3,image_url=$4,image_url_2=$5,image_url_3=$6,github_url=$7,live_url=$8,label=$9 WHERE id=$10 RETURNING *',
@@ -339,7 +389,7 @@ app.put('/api/projects/:id', async (req, res) => {
   );
   res.json(rows[0]);
 });
-app.delete('/api/projects/:id', async (req, res) => {
+app.delete('/api/projects/:id', requireAuth, async (req, res) => {
   await pool.query('DELETE FROM projects WHERE id=$1', [req.params.id]);
   res.json({ success: true });
 });
@@ -349,7 +399,7 @@ app.get('/api/skills', async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM skills ORDER BY created_at DESC');
   res.json(rows);
 });
-app.post('/api/skills', async (req, res) => {
+app.post('/api/skills', requireAuth, async (req, res) => {
   const { name, category, icon_key, level } = req.body;
   const { rows } = await pool.query(
     'INSERT INTO skills (name,category,icon_key,level) VALUES($1,$2,$3,$4) RETURNING *',
@@ -357,7 +407,7 @@ app.post('/api/skills', async (req, res) => {
   );
   res.json(rows[0]);
 });
-app.put('/api/skills/:id', async (req, res) => {
+app.put('/api/skills/:id', requireAuth, async (req, res) => {
   const { name, category, icon_key, level } = req.body;
   const { rows } = await pool.query(
     'UPDATE skills SET name=$1,category=$2,icon_key=$3,level=$4 WHERE id=$5 RETURNING *',
@@ -365,7 +415,7 @@ app.put('/api/skills/:id', async (req, res) => {
   );
   res.json(rows[0]);
 });
-app.delete('/api/skills/:id', async (req, res) => {
+app.delete('/api/skills/:id', requireAuth, async (req, res) => {
   await pool.query('DELETE FROM skills WHERE id=$1', [req.params.id]);
   res.json({ success: true });
 });
@@ -375,7 +425,7 @@ app.get('/api/certifications', async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM certifications ORDER BY created_at DESC');
   res.json(rows);
 });
-app.post('/api/certifications', async (req, res) => {
+app.post('/api/certifications', requireAuth, async (req, res) => {
   const { name, issuer, issued_date, pdf_url, image_url } = req.body;
   const { rows } = await pool.query(
     'INSERT INTO certifications (name,issuer,issued_date,pdf_url,image_url) VALUES($1,$2,$3,$4,$5) RETURNING *',
@@ -383,7 +433,7 @@ app.post('/api/certifications', async (req, res) => {
   );
   res.json(rows[0]);
 });
-app.put('/api/certifications/:id', async (req, res) => {
+app.put('/api/certifications/:id', requireAuth, async (req, res) => {
   const { name, issuer, issued_date, pdf_url, image_url } = req.body;
   const { rows } = await pool.query(
     'UPDATE certifications SET name=$1,issuer=$2,issued_date=$3,pdf_url=$4,image_url=$5 WHERE id=$6 RETURNING *',
@@ -391,7 +441,7 @@ app.put('/api/certifications/:id', async (req, res) => {
   );
   res.json(rows[0]);
 });
-app.delete('/api/certifications/:id', async (req, res) => {
+app.delete('/api/certifications/:id', requireAuth, async (req, res) => {
   await pool.query('DELETE FROM certifications WHERE id=$1', [req.params.id]);
   res.json({ success: true });
 });
@@ -401,7 +451,7 @@ app.get('/api/experiences', async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM experiences ORDER BY created_at DESC');
   res.json(rows);
 });
-app.post('/api/experiences', async (req, res) => {
+app.post('/api/experiences', requireAuth, async (req, res) => {
   const { title, date, description, link_url, image_url, image_url_2, image_url_3 } = req.body;
   const { rows } = await pool.query(
     'INSERT INTO experiences (title,date,description,link_url,image_url,image_url_2,image_url_3) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',
@@ -409,7 +459,7 @@ app.post('/api/experiences', async (req, res) => {
   );
   res.json(rows[0]);
 });
-app.put('/api/experiences/:id', async (req, res) => {
+app.put('/api/experiences/:id', requireAuth, async (req, res) => {
   const { title, date, description, link_url, image_url, image_url_2, image_url_3 } = req.body;
   const { rows } = await pool.query(
     'UPDATE experiences SET title=$1,date=$2,description=$3,link_url=$4,image_url=$5,image_url_2=$6,image_url_3=$7 WHERE id=$8 RETURNING *',
@@ -417,13 +467,13 @@ app.put('/api/experiences/:id', async (req, res) => {
   );
   res.json(rows[0]);
 });
-app.delete('/api/experiences/:id', async (req, res) => {
+app.delete('/api/experiences/:id', requireAuth, async (req, res) => {
   await pool.query('DELETE FROM experiences WHERE id=$1', [req.params.id]);
   res.json({ success: true });
 });
 
 // ── MESSAGES CRUD ──────────────────────────────────────────────
-app.get('/api/messages', async (req, res) => {
+app.get('/api/messages', requireAuth, async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM messages ORDER BY created_at DESC');
   res.json(rows);
 });
@@ -436,7 +486,7 @@ app.post('/api/messages', async (req, res) => {
   );
   res.json(rows[0]);
 });
-app.delete('/api/messages/:id', async (req, res) => {
+app.delete('/api/messages/:id', requireAuth, async (req, res) => {
   await pool.query('DELETE FROM messages WHERE id=$1', [req.params.id]);
   res.json({ success: true });
 });
@@ -625,7 +675,7 @@ app.post('/api/osint/scan', async (req, res) => {
 });
 
 // ── OSINT SCANS LOG (Admin) ────────────────────────────────────
-app.get('/api/osint/scans', async (req, res) => {
+app.get('/api/osint/scans', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
       'SELECT id, full_name, ip, found_count, created_at FROM osint_scans ORDER BY created_at DESC'
@@ -636,7 +686,7 @@ app.get('/api/osint/scans', async (req, res) => {
   }
 });
 
-app.delete('/api/osint/scans/:id', async (req, res) => {
+app.delete('/api/osint/scans/:id', requireAuth, async (req, res) => {
   try {
     await pool.query('DELETE FROM osint_scans WHERE id=$1', [req.params.id]);
     res.json({ success: true });
