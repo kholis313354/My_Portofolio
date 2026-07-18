@@ -1,31 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React from 'react';
+import useDraggable from './hooks/useDraggable';
+import WindowControls from './components/WindowControls';
 
 export default function TryHackMeWindow({ onClose }) {
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStart = useRef({ x: 0, y: 0 });
-
-  const handleMouseDown = (e) => {
-    setIsDragging(true);
-    dragStart.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
-  };
-
-  useEffect(() => {
-    const handleMouseMove = (e) => {
-      if (!isDragging) return;
-      setPos({ x: e.clientX - dragStart.current.x, y: e.clientY - dragStart.current.y });
-    };
-    const handleMouseUp = () => setIsDragging(false);
-
-    if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-    }
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDragging, pos]);
+  const { pos, handleMouseDown } = useDraggable();
 
   return (
     <div
@@ -83,17 +61,7 @@ export default function TryHackMeWindow({ onClose }) {
           </svg>
         </div>
 
-        <div className="flex h-full">
-          <button className="w-[45px] h-full flex items-center justify-center hover:bg-white/10 text-gray-400 transition-colors">
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M19 13H5v-2h14v2z" /></svg>
-          </button>
-          <button className="w-[45px] h-full flex items-center justify-center hover:bg-white/10 text-gray-400 transition-colors">
-            <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" /></svg>
-          </button>
-          <button onClick={onClose} className="w-[45px] h-full flex items-center justify-center hover:bg-[#e81123] hover:text-white text-gray-400 transition-colors">
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg>
-          </button>
-        </div>
+        <WindowControls onClose={onClose} />
       </div>
 
       {/* Window Body */}
