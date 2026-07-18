@@ -100,6 +100,10 @@ const upload = multer({
   }
 });
 
+// Wrap async route handlers so rejected promises are forwarded to the
+// Express error-handling middleware instead of leaving the request hanging.
+const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -319,115 +323,119 @@ app.get('/v1/kernel-access/logs', async (req, res) => {
 });
 
 // ── PROJECTS CRUD ──────────────────────────────────────────────
-app.get('/api/projects', async (req, res) => {
+app.get('/api/projects', asyncHandler(async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM projects ORDER BY created_at DESC');
   res.json(rows);
-});
-app.post('/api/projects', async (req, res) => {
+}));
+app.post('/api/projects', asyncHandler(async (req, res) => {
   const { title, description, tech_stack, image_url, image_url_2, image_url_3, github_url, live_url, label } = req.body;
   const { rows } = await pool.query(
     'INSERT INTO projects (title,description,tech_stack,image_url,image_url_2,image_url_3,github_url,live_url,label) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
     [title, description, tech_stack, image_url, image_url_2, image_url_3, github_url, live_url, label]
   );
   res.json(rows[0]);
-});
-app.put('/api/projects/:id', async (req, res) => {
+}));
+app.put('/api/projects/:id', asyncHandler(async (req, res) => {
   const { title, description, tech_stack, image_url, image_url_2, image_url_3, github_url, live_url, label } = req.body;
   const { rows } = await pool.query(
     'UPDATE projects SET title=$1,description=$2,tech_stack=$3,image_url=$4,image_url_2=$5,image_url_3=$6,github_url=$7,live_url=$8,label=$9 WHERE id=$10 RETURNING *',
     [title, description, tech_stack, image_url, image_url_2, image_url_3, github_url, live_url, label, req.params.id]
   );
+  if (!rows[0]) return res.status(404).json({ error: 'Project not found' });
   res.json(rows[0]);
-});
-app.delete('/api/projects/:id', async (req, res) => {
+}));
+app.delete('/api/projects/:id', asyncHandler(async (req, res) => {
   await pool.query('DELETE FROM projects WHERE id=$1', [req.params.id]);
   res.json({ success: true });
-});
+}));
 
 // ── SKILLS CRUD ────────────────────────────────────────────────
-app.get('/api/skills', async (req, res) => {
+app.get('/api/skills', asyncHandler(async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM skills ORDER BY created_at DESC');
   res.json(rows);
-});
-app.post('/api/skills', async (req, res) => {
+}));
+app.post('/api/skills', asyncHandler(async (req, res) => {
   const { name, category, icon_key, level } = req.body;
   const { rows } = await pool.query(
     'INSERT INTO skills (name,category,icon_key,level) VALUES($1,$2,$3,$4) RETURNING *',
     [name, category, icon_key, level || 80]
   );
   res.json(rows[0]);
-});
-app.put('/api/skills/:id', async (req, res) => {
+}));
+app.put('/api/skills/:id', asyncHandler(async (req, res) => {
   const { name, category, icon_key, level } = req.body;
   const { rows } = await pool.query(
     'UPDATE skills SET name=$1,category=$2,icon_key=$3,level=$4 WHERE id=$5 RETURNING *',
     [name, category, icon_key, level, req.params.id]
   );
+  if (!rows[0]) return res.status(404).json({ error: 'Skill not found' });
   res.json(rows[0]);
-});
-app.delete('/api/skills/:id', async (req, res) => {
+}));
+app.delete('/api/skills/:id', asyncHandler(async (req, res) => {
   await pool.query('DELETE FROM skills WHERE id=$1', [req.params.id]);
   res.json({ success: true });
-});
+}));
 
 // ── CERTIFICATIONS CRUD ────────────────────────────────────────
-app.get('/api/certifications', async (req, res) => {
+app.get('/api/certifications', asyncHandler(async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM certifications ORDER BY created_at DESC');
   res.json(rows);
-});
-app.post('/api/certifications', async (req, res) => {
+}));
+app.post('/api/certifications', asyncHandler(async (req, res) => {
   const { name, issuer, issued_date, pdf_url, image_url } = req.body;
   const { rows } = await pool.query(
     'INSERT INTO certifications (name,issuer,issued_date,pdf_url,image_url) VALUES($1,$2,$3,$4,$5) RETURNING *',
     [name, issuer, issued_date, pdf_url, image_url]
   );
   res.json(rows[0]);
-});
-app.put('/api/certifications/:id', async (req, res) => {
+}));
+app.put('/api/certifications/:id', asyncHandler(async (req, res) => {
   const { name, issuer, issued_date, pdf_url, image_url } = req.body;
   const { rows } = await pool.query(
     'UPDATE certifications SET name=$1,issuer=$2,issued_date=$3,pdf_url=$4,image_url=$5 WHERE id=$6 RETURNING *',
     [name, issuer, issued_date, pdf_url, image_url, req.params.id]
   );
+  if (!rows[0]) return res.status(404).json({ error: 'Certification not found' });
   res.json(rows[0]);
-});
-app.delete('/api/certifications/:id', async (req, res) => {
+}));
+app.delete('/api/certifications/:id', asyncHandler(async (req, res) => {
   await pool.query('DELETE FROM certifications WHERE id=$1', [req.params.id]);
   res.json({ success: true });
-});
+}));
 
 // ── EXPERIENCES CRUD ───────────────────────────────────────────
-app.get('/api/experiences', async (req, res) => {
+app.get('/api/experiences', asyncHandler(async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM experiences ORDER BY created_at DESC');
   res.json(rows);
-});
-app.post('/api/experiences', async (req, res) => {
+}));
+app.post('/api/experiences', asyncHandler(async (req, res) => {
   const { title, date, description, link_url, image_url, image_url_2, image_url_3 } = req.body;
   const { rows } = await pool.query(
     'INSERT INTO experiences (title,date,description,link_url,image_url,image_url_2,image_url_3) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',
     [title, date, description, link_url, image_url, image_url_2, image_url_3]
   );
   res.json(rows[0]);
-});
-app.put('/api/experiences/:id', async (req, res) => {
+}));
+app.put('/api/experiences/:id', asyncHandler(async (req, res) => {
   const { title, date, description, link_url, image_url, image_url_2, image_url_3 } = req.body;
   const { rows } = await pool.query(
     'UPDATE experiences SET title=$1,date=$2,description=$3,link_url=$4,image_url=$5,image_url_2=$6,image_url_3=$7 WHERE id=$8 RETURNING *',
     [title, date, description, link_url, image_url, image_url_2, image_url_3, req.params.id]
   );
+  if (!rows[0]) return res.status(404).json({ error: 'Experience not found' });
   res.json(rows[0]);
-});
-app.delete('/api/experiences/:id', async (req, res) => {
+}));
+app.delete('/api/experiences/:id', asyncHandler(async (req, res) => {
   await pool.query('DELETE FROM experiences WHERE id=$1', [req.params.id]);
   res.json({ success: true });
-});
+}));
 
 // ── MESSAGES CRUD ──────────────────────────────────────────────
-app.get('/api/messages', async (req, res) => {
+app.get('/api/messages', asyncHandler(async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM messages ORDER BY created_at DESC');
   res.json(rows);
-});
-app.post('/api/messages', async (req, res) => {
+}));
+app.post('/api/messages', asyncHandler(async (req, res) => {
   const { email, content } = req.body;
   if (!email || !content) return res.status(400).json({ error: 'Email and content required' });
   const { rows } = await pool.query(
@@ -435,11 +443,11 @@ app.post('/api/messages', async (req, res) => {
     [email, content]
   );
   res.json(rows[0]);
-});
-app.delete('/api/messages/:id', async (req, res) => {
+}));
+app.delete('/api/messages/:id', asyncHandler(async (req, res) => {
   await pool.query('DELETE FROM messages WHERE id=$1', [req.params.id]);
   res.json({ success: true });
-});
+}));
 
 // ── OSINT NAME SEARCH — RATE LIMIT CHECK ──────────────────────
 app.get('/api/osint/rate-check', async (req, res) => {
@@ -648,6 +656,24 @@ app.delete('/api/osint/scans/:id', async (req, res) => {
 // Routing Catch-all untuk SPA: Kirim semua request yang bukan API ke index.html
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
+// ── GLOBAL ERROR HANDLER ──────────────────────────────────────
+// Catches errors forwarded by asyncHandler and synchronous middleware
+// (e.g. Multer file-size/type errors) so nothing is silently swallowed.
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+
+  if (err instanceof multer.MulterError) {
+    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    return res.status(status).json({ error: err.message, code: err.code });
+  }
+  if (err && err.message === 'Only images and PDFs allowed') {
+    return res.status(400).json({ error: err.message, code: 'INVALID_FILE_TYPE' });
+  }
+
+  console.error(`[UNHANDLED_ERROR] ${req.method} ${req.originalUrl}:`, err);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 app.listen(PORT, '0.0.0.0', () => console.log(`Backend server running on http://0.0.0.0:${PORT}`));

@@ -454,8 +454,10 @@ function ProjectsSection() {
   };
 
   const handleDelete = async () => {
-    await axios.delete(`${API}/api/projects/${confirmId}`);
-    setConfirmId(null); fetchData();
+    try {
+      await axios.delete(`${API}/api/projects/${confirmId}`);
+      setConfirmId(null); fetchData();
+    } catch (e) { alert('Gagal menghapus: ' + e.message); }
   };
 
   return (
@@ -526,7 +528,7 @@ function SkillsSection() {
     } catch (e) { alert('Gagal: ' + e.message); }
   };
 
-  const handleDelete = async () => { await axios.delete(`${API}/api/skills/${confirmId}`); setConfirmId(null); fetchData(); };
+  const handleDelete = async () => { try { await axios.delete(`${API}/api/skills/${confirmId}`); setConfirmId(null); fetchData(); } catch (e) { alert('Gagal menghapus: ' + e.message); } };
 
   return (
     <div className="p-6">
@@ -609,7 +611,7 @@ function CertificationsSection() {
     } catch (e) { alert('Gagal menyimpan: ' + e.message); }
   };
 
-  const handleDelete = async () => { await axios.delete(`${API}/api/certifications/${confirmId}`); setConfirmId(null); fetchData(); };
+  const handleDelete = async () => { try { await axios.delete(`${API}/api/certifications/${confirmId}`); setConfirmId(null); fetchData(); } catch (e) { alert('Gagal menghapus: ' + e.message); } };
 
   return (
     <div className="p-8">
@@ -831,7 +833,7 @@ const ProjectsWithRef = React.forwardRef((_, ref) => {
       fetchData(); setModal(null);
     } catch (e) { alert('CRITICAL_FAILURE: ' + e.message); }
   };
-  const handleDelete = async () => { await axios.delete(`${API}/api/projects/${confirmId}`); setConfirmId(null); fetchData(); };
+  const handleDelete = async () => { try { await axios.delete(`${API}/api/projects/${confirmId}`); setConfirmId(null); fetchData(); } catch (e) { alert('Gagal menghapus: ' + e.message); } };
 
   return (
     <div className="p-8">
@@ -900,7 +902,7 @@ const SkillsWithRef = React.forwardRef((_, ref) => {
       fetchData(); setModal(null);
     } catch (e) { alert('FAILURE: ' + e.message); }
   };
-  const handleDelete = async () => { await axios.delete(`${API}/api/skills/${confirmId}`); setConfirmId(null); fetchData(); };
+  const handleDelete = async () => { try { await axios.delete(`${API}/api/skills/${confirmId}`); setConfirmId(null); fetchData(); } catch (e) { alert('Gagal menghapus: ' + e.message); } };
 
   return (
     <div className="p-8">
@@ -977,7 +979,7 @@ const CertsWithRef = React.forwardRef((_, ref) => {
       fetchData(); setModal(null);
     } catch (e) { alert('DEPLOYMENT_ERROR: ' + e.message); }
   };
-  const handleDelete = async () => { await axios.delete(`${API}/api/certifications/${confirmId}`); setConfirmId(null); fetchData(); };
+  const handleDelete = async () => { try { await axios.delete(`${API}/api/certifications/${confirmId}`); setConfirmId(null); fetchData(); } catch (e) { alert('Gagal menghapus: ' + e.message); } };
 
   return (
     <div className="p-8">
@@ -1037,7 +1039,7 @@ const ExperiencesWithRef = React.forwardRef((_, ref) => {
       fetchData(); setModal(null);
     } catch (e) { alert('ERROR: ' + e.message); }
   };
-  const handleDelete = async () => { await axios.delete(`${API}/api/experiences/${confirmId}`); setConfirmId(null); fetchData(); };
+  const handleDelete = async () => { try { await axios.delete(`${API}/api/experiences/${confirmId}`); setConfirmId(null); fetchData(); } catch (e) { alert('Gagal menghapus: ' + e.message); } };
 
   return (
     <div className="p-8">
@@ -1097,8 +1099,10 @@ const OsintLogsSection = () => {
     finally { setLoading(false); }
   };
   const handleDelete = async () => {
-    await axios.delete(`${API}/api/osint/scans/${confirmId}`);
-    setConfirmId(null); fetchData();
+    try {
+      await axios.delete(`${API}/api/osint/scans/${confirmId}`);
+      setConfirmId(null); fetchData();
+    } catch (e) { alert('Gagal menghapus: ' + e.message); }
   };
 
   // Group by date
@@ -1265,7 +1269,7 @@ const MessagesList = () => {
 
   useEffect(() => { fetchData(); }, []);
   const fetchData = async () => { try { const { data } = await axios.get(`${API}/api/messages`); setData(data); } catch {} };
-  const handleDelete = async () => { await axios.delete(`${API}/api/messages/${confirmId}`); setConfirmId(null); fetchData(); };
+  const handleDelete = async () => { try { await axios.delete(`${API}/api/messages/${confirmId}`); setConfirmId(null); fetchData(); } catch (e) { alert('Gagal menghapus: ' + e.message); } };
 
   return (
     <div className="p-8">
