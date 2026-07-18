@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import useDraggable from './hooks/useDraggable';
+import WindowControls from './components/WindowControls';
 
 const API = '';
 
@@ -174,9 +176,7 @@ const buildResultsArray = (data) => {
 };
 
 export default function OsintTerminal({ onClose }) {
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStart = useRef({ x: 0, y: 0 });
+  const { pos, handleMouseDown } = useDraggable();
   const bodyRef = useRef(null);
 
   // 0=InitDesc, 1=Input, 2=Fetching, 3=ResultTyping, 4=Done, 5=Error, 6=RateLimit
@@ -191,18 +191,6 @@ export default function OsintTerminal({ onClose }) {
   const [errorMsg, setErrorMsg] = useState('');
   const [rateInfo, setRateInfo] = useState(null); // { used, limit, remaining }
   const loadingChars = ['|', '/', '-', '\\'];
-
-  // ── Drag ─────────────────────────────────────────────────────
-  const handleMouseDown = (e) => {
-    setIsDragging(true);
-    dragStart.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
-  };
-  useEffect(() => {
-    const onMove = (e) => { if (!isDragging) return; setPos({ x: e.clientX - dragStart.current.x, y: e.clientY - dragStart.current.y }); };
-    const onUp = () => setIsDragging(false);
-    if (isDragging) { window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp); }
-    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-  }, [isDragging]);
 
   // ── Step 0: Typewriter ────────────────────────────────────────
   useEffect(() => {
@@ -352,17 +340,14 @@ export default function OsintTerminal({ onClose }) {
           )}
         </div>
 
-        <div className="flex h-full">
-          <button className="w-[40px] h-full flex items-center justify-center text-gray-700 hover:bg-white/5 transition-colors">
-            <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M19 13H5v-2h14v2z" /></svg>
-          </button>
-          <button className="w-[40px] h-full flex items-center justify-center text-gray-700 hover:bg-white/5 transition-colors">
-            <svg viewBox="0 0 24 24" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" /></svg>
-          </button>
-          <button onClick={onClose} className="w-[40px] h-full flex items-center justify-center text-gray-700 hover:bg-[#e81123] hover:text-white transition-colors rounded-tr">
-            <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg>
-          </button>
-        </div>
+        <WindowControls
+          onClose={onClose}
+          buttonWidth={40}
+          iconSize={11}
+          buttonClassName="hover:bg-white/5 text-gray-700"
+          closeClassName="hover:bg-[#e81123] hover:text-white text-gray-700"
+          roundedClose
+        />
       </div>
 
       {/* ── Terminal Body ── */}
